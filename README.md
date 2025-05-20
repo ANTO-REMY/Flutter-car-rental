@@ -1,16 +1,13 @@
-# flutter_cat1
+# Remy Car Rentals
+A modern Flutter application for car rental services, providing a seamless experience for users to browse, book, and manage car rentals.
 
-A new Flutter project.
-
-## Getting Started
-
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Features
+- User Authentication : Secure login and registration system
+- Car Browsing : Browse through a variety of cars with detailed information
+- Advanced Filtering : Filter cars by brand, fuel type, and price range
+- Search Functionality : Search for specific cars by name or description
+- Favorites System : Save your favorite cars for quick access
+- Booking System : Complete booking flow with date selection and customer details
+- Order Management : Track and manage your bookings
+- User Profile : View and update your profile information
+- Payment Integration : Support for MPESA payment method
