@@ -48,7 +48,7 @@ class Car {
 Future<List<Car>> fetchCars() async {
   try {
     final response = await http.get(
-      Uri.parse('https://tujengeane.co.ke/CarRental/getCars.php'),
+      Uri.parse('http://localhost/php_backend/getCars.php'),
     );
 
     if (response.statusCode == 200) {

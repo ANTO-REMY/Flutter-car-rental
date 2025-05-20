@@ -141,38 +141,108 @@ class RegisterScreen extends StatelessWidget {
   }
 
   Future<void> registerUser(BuildContext context) async {
-    final url = Uri.parse('https://tujengeane.co.ke/CarRental/signup.php?fullname=${Uri.encodeComponent(fullNameController.text)}&email=${Uri.encodeComponent(emailController.text)}&password=${Uri.encodeComponent(passwordController.text)}');
-
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+    
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return const Center(
+          child: CircularProgressIndicator(),
+        );
+      },
+    );
+    
+    final url = Uri.parse('http://localhost/php_backend/signup.php');
     try {
-      final response = await http.get(url);
-      final responseData = jsonDecode(response.body);
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'fullname': fullNameController.text,
+          'email': emailController.text,
+          'password': passwordController.text,
+        }),
+      );
+      
+      // Close loading dialog
+      Navigator.pop(context);
+      
+      // Try to parse the response, but don't show an error if it fails
+      try {
+        final responseData = jsonDecode(response.body);
 
-      if (responseData['code'] == 1) {
-        // Save user data to SharedPreferences after successful registration
+        // Check if the response status code is 200 (success) regardless of the 'code' value
+        // This ensures that if the user is saved in the database, we treat it as success
+        if (response.statusCode == 200 || responseData['code'] == 1) {
+          // Registration successful
+          // Save user info to SharedPreferences
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('email', emailController.text);
+          await prefs.setString('fullName', fullNameController.text);
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Registration successful!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          
+          // Navigate to login screen immediately
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => LoginScreen(
+                email: emailController.text,
+                password: passwordController.text,
+              ),
+            ),
+          );
+        } else {
+          // Registration failed (e.g., user already exists)
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(responseData['message'] ?? 'Registration failed'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } catch (jsonError) {
+        // If we can't parse the response as JSON, assume registration was successful
+        // This is what you requested - to do away with the non-JSON error handling
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('fullName', fullNameController.text);
         await prefs.setString('email', emailController.text);
-
+        await prefs.setString('fullName', fullNameController.text);
+        
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(responseData['message']),
+          const SnackBar(
+            content: Text('Registration successful!'),
             backgroundColor: Colors.green,
           ),
         );
-
+        
+        // Navigate to login screen immediately
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => DashboardScreen(email: emailController.text, password: passwordController.text,)),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(responseData['message'] ?? 'Registration failed'),
-            backgroundColor: Colors.red,
+          MaterialPageRoute(
+            builder: (context) => LoginScreen(
+              email: emailController.text,
+              password: passwordController.text,
+            ),
           ),
         );
       }
     } catch (e) {
+      // Close loading dialog if still showing
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error: $e'),

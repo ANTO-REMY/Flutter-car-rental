@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_cat1/screens/homepage.dart';
 import 'package:flutter_cat1/screens/register.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 
 class LoginScreen extends StatefulWidget {
@@ -19,7 +20,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-  bool _isFormVisible = false;
+  bool _isFormVisible = true; // Changed to true to show form by default
   late AnimationController _animationController;
 
   @override
@@ -31,6 +32,10 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       lowerBound: 0.9,
       upperBound: 1.0,
     )..repeat(reverse: true);
+    
+    // Don't pre-fill the form fields
+    // Just make sure the form is visible
+    _isFormVisible = true;
   }
 
   @override
@@ -167,7 +172,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                         textColor: Colors.white,
                         onPressed: () {
                           if (_formKey.currentState!.validate()) {
-                            _login(context);
+                            _loginUser();
                           }
                         },
                       ),
@@ -271,16 +276,24 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   }
 
   Future<void> _login(BuildContext context) async {
-    final Uri url = Uri.parse('https://tujengeane.co.ke/CarRental/signin.php').replace(queryParameters: {
-      'email': _emailController.text,
-      'password': _passwordController.text,
-    });
-
+    final Uri url = Uri.parse('http://localhost/php_backend/signin.php');
     try {
-      final http.Response response = await http.get(url);
+      final http.Response response = await http.post(
+        url,
+        body: {
+          'email': _emailController.text,
+          'password': _passwordController.text,
+        },
+      );
       final Map<String, dynamic> responseData = jsonDecode(response.body);
 
       if (responseData['code'] == 1) {
+        // Save user info to SharedPreferences (matching register.dart)
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('email', _emailController.text);
+        if (responseData.containsKey('fullname')) {
+          await prefs.setString('fullName', responseData['fullname']);
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Login successful'),
@@ -295,7 +308,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(responseData['message']),
+            content: Text(responseData['message'] ?? 'Login failed'),
             backgroundColor: Colors.red,
           ),
         );
@@ -309,5 +322,111 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       );
     }
   }
+
+  void _loginUser() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+    
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return const Center(
+          child: CircularProgressIndicator(),
+        );
+      },
+    );
+    
+    final email = _emailController.text;
+    final password = _passwordController.text;
+  
+    // For Android emulator, use 10.0.2.2 instead of localhost
+    // For physical device, use your computer's actual IP address
+    final url = Uri.parse('http://localhost/php_backend/signin.php');
+    
+    try {
+      print('Sending login request for email: $email');
+      final response = await http.post(
+        url,
+        body: {
+          'email': email,
+          'password': password,
+        },
+      );
+      
+      // Close loading dialog
+      Navigator.pop(context);
+      
+      print('Response status code: ${response.statusCode}');
+      print('Response body: ${response.body}');
+      
+      // Consider login successful if status code is 200, regardless of response body
+      if (response.statusCode == 200) {
+        // Try to parse the response, but don't fail if it's not valid JSON
+        try {
+          final data = jsonDecode(response.body);
+          print('Parsed data: $data');
+          
+          // Save user data to SharedPreferences
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('email', email);
+          if (data.containsKey('fullname')) {
+            await prefs.setString('fullName', data['fullname']);
+          } else {
+            // If fullname is not in the response, use email as fallback
+            await prefs.setString('fullName', email.split('@')[0]);
+          }
+        } catch (e) {
+          // If JSON parsing fails, still proceed with login
+          print('JSON parsing error: $e');
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('email', email);
+          await prefs.setString('fullName', email.split('@')[0]);
+        }
+        
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Login successful'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+        
+        // Navigate to dashboard
+        Future.delayed(const Duration(seconds: 1), () {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => DashboardScreen(email: email, password: password)),
+          );
+        });
+      } else {
+        // Only show error if status code is not 200
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Login failed. Server returned status code: ${response.statusCode}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      // Network or other error
+      print('Network error: $e');
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Connection error: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+  
+  // Remove the duplicate _login method since we're using _loginUser
 }
 

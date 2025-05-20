@@ -1,43 +1,72 @@
 <?php
+// Allow from any origin
 header('Content-Type: application/json');
 header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Headers: Access-Control-Allow-Origin, Accept");
+header("Access-Control-Allow-Methods: POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
+header("Access-Control-Max-Age: 3600");
+
 require_once 'connect.php';
 
-// Get user input from POST request
-$fullname = $_GET['fullname'];
-$email = $_GET['email'];
-$password = md5($_GET['password']);
+// Remove preflight handling and ensure only POST requests are allowed
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    echo json_encode([
+        'code' => 0,
+        'message' => 'Method Not Allowed. Use POST with JSON data.'
+    ]);
+    exit();
+}
 
+// Read JSON input
+$input = json_decode(file_get_contents('php://input'), true);
+$fullname = $input['fullname'] ?? '';
+$email = $input['email'] ?? '';
+$password = $input['password'] ?? '';
 
-// Check if the email already exists
-$checkEmailQuery = mysqli_query($con, "SELECT email FROM Users WHERE email = '$email'");
-if (mysqli_num_rows($checkEmailQuery) > 0) {
-    // Email already exists
+if (empty($fullname) || empty($email) || empty($password)) {
+    echo json_encode([
+        'code' => 0,
+        'message' => 'All fields are required.'
+    ]);
+    exit();
+}
+
+// Use prepared statements to prevent SQL injection
+$stmt = $con->prepare('SELECT email FROM Users WHERE email = ?');
+$stmt->bind_param('s', $email);
+$stmt->execute();
+$stmt->store_result();
+if ($stmt->num_rows > 0) {
     echo json_encode([
         'code' => 0,
         'message' => 'Email already registered.'
     ]);
-} else {
-    // Insert user into database
-    $insertQuery = "INSERT INTO Users (fullname, email, password ) 
-                    VALUES ('$fullname', '$email', '$password')";
+    $stmt->close();
+    $con->close();
+    exit();
+}
+$stmt->close();
 
-    if (mysqli_query($con, $insertQuery)) {
-        // Return success response
-        echo json_encode([
-            'code' => 1,
-            'message' => 'Registration successful.'
-        ]);
-    } else {
-        // Return error response
-        echo json_encode([
-            'code' => 0,
-            'message' => 'Error in registration: ' . mysqli_error($con)
-        ]);
-    }
+$hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+$insertStmt = $con->prepare('INSERT INTO Users (fullname, email, password) VALUES (?, ?, ?)');
+$insertStmt->bind_param('sss', $fullname, $email, $hashedPassword);
+
+// Update success response to include 'code' key
+if ($insertStmt->execute()) {
+    echo json_encode([
+        'code' => 1,
+        'message' => 'Registration successful.',
+        'fullname' => $fullname,
+        'email' => $email
+    ]);
+} else {
+    echo json_encode([
+        'code' => 0,
+        'message' => 'Error in registration: ' . $con->error
+    ]);
 }
 
-// Close the database connection
-mysqli_close($con);
+$insertStmt->close();
+$con->close();
 ?>
